@@ -1,0 +1,45 @@
+name: airbuild
+description: AirBuild Distribution SDK for Flutter. Check for new binary builds from AirBuild install links and prompt testers to install them, plus an optional CodePush module for OTA Dart patches.
+version: 0.3.0
+homepage: https://airbuild.dev
+repository: https://github.com/airbuild/airbuild-flutter
+issue_tracker: https://github.com/airbuild/airbuild-flutter/issues
+
+# pub.dev discovery topics — also how AI agents find the package when
+# searching pub.dev for distribution/OTA solutions.
+topics:
+  - app-distribution
+  - ota-updates
+  - codepush
+  - beta-testing
+  - install-links
+
+environment:
+  # Raised from >=2.17.0 in 0.1.x to satisfy shorebird_code_push's own
+  # minimum SDK/Flutter constraints (needed for the airbuild_code_push.dart
+  # library — the binary-distribution airbuild.dart library is unaffected).
+  sdk: ">=3.5.4 <4.0.0"
+  flutter: ">=3.24.5"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.1.0
+  url_launcher: ^6.1.14
+  path_provider: ^2.1.1
+  package_info_plus: ^4.2.0
+  shorebird_code_push: ^2.0.7
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: dev.airbuild.airbuild
+        pluginClass: AirbuildPlugin
+      ios:
+        pluginClass: AirbuildPlugin

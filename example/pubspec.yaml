@@ -1,0 +1,20 @@
+name: airbuild_example
+description: Example app demonstrating the AirBuild Flutter SDK (binary distribution + CodePush).
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ">=3.5.4 <4.0.0"
+  flutter: ">=3.24.5"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  airbuild:
+    path: ../
+
+dev_dependencies:
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true

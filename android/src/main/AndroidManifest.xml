@@ -1,0 +1,24 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="dev.airbuild.airbuild">
+
+    <!-- Required to reach the AirBuild API and download APK updates. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Required to trigger the system package installer for self-installing
+         downloaded APK updates on Android 8.0+ (API 26+). Without this,
+         the install Intent is blocked and there is no way for the user to
+         grant the "install unknown apps" permission for this app. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <application>
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.airbuild.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/airbuild_file_paths" />
+        </provider>
+    </application>
+</manifest>
