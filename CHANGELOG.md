@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1 - 2026-10-22
+
+### Fixed
+- README updated: Install snippet now shows the correct `^0.3.0` constraint.
+
 ## 0.3.0 - 2026-10-20
 
 ### Added
