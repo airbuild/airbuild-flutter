@@ -13,16 +13,14 @@ These are separate concerns: the update check asks "is there a newer *build*?", 
 
 ```yaml
 dependencies:
-  airbuild: ^0.2.0
+  airbuild: ^0.3.0
 ```
 
 ```bash
 flutter pub get
 ```
 
----
-
-## Part 1 — Binary build update check
+## Binary build update check
 
 Call `AirBuild.configure()` once at startup, then `checkForUpdates()` anywhere:
 
@@ -32,7 +30,6 @@ import 'package:airbuild/airbuild.dart';
 void main() {
   AirBuild.configure(
     distributionKey: 'dk_a1b2c3d4e5f6', // from the AirBuild dashboard
-    // baseUrl: 'https://airbuild.dev', // optional override (self-hosted)
   );
   runApp(const MyApp());
 }
@@ -58,11 +55,9 @@ The **distribution key** (`dk_xxx`) is a public identifier — safe to embed, no
 **Android:** no setup needed — `INTERNET`, `REQUEST_INSTALL_PACKAGES`, and the `FileProvider` are declared by the plugin. On first install, Android may ask the user to allow installs from your app (required on API 26+).
 **iOS:** no setup needed.
 
----
+## CodePush (OTA Dart patches)
 
-## Part 2 — CodePush (OTA Dart patches)
-
-> **Prerequisite:** your app binary must be built by `airbuild codepush flutter release` — the AirBuild CLI compiles the OTA updater runtime into your app. A plain `flutter build` does not contain the updater. See the [Flutter CodePush guide](https://docs.airbuild.dev/guides/codepush-flutter/) for CLI setup (`airbuild codepush flutter doctor/install/init`).
+> **Prerequisite:** your app binary must be built by `airbuild codepush flutter release` — the AirBuild CLI compiles the OTA updater runtime into your app. A plain `flutter build` does not contain the updater. See the [Flutter CodePush guide](https://docs.airbuild.dev/guides/codepush-flutter/) for CLI setup.
 
 ### How patching works
 
@@ -88,7 +83,6 @@ Set `auto_update: false` in `shorebird.yaml`. Now the boot thread does nothing a
 ```yaml
 # shorebird.yaml
 app_id: <your-app-id>
-base_url: https://airbuild.dev
 auto_update: false
 ```
 
@@ -181,8 +175,8 @@ if (status == UpdateStatus.outdated) {
 ### Behavior notes
 
 - **`isAvailable`** — `false` in debug builds, tests, and builds without the updater runtime. Every method degrades gracefully (checks return `unavailable`, patch reads return `null`) — safe to call unconditionally.
-- **Signing** — if the release build embedded `patch_public_key` (the AirBuild CLI does this automatically), the device verifies `hash_signature` before installing.
-- **Rollback** — if a patch is rolled back server-side, the next check reports it in `rolled_back_patch_numbers` and the updater reverts to the base release.
+- **Signing** — patch signatures are verified on-device before installing (configured automatically by the AirBuild CLI).
+- **Rollback** — if a patch is rolled back server-side, the updater reverts to the base release automatically.
 - **Bad patches** — a patch that fails verification/install is remembered and skipped automatically.
 
 ### Using both features together
@@ -208,14 +202,3 @@ Future<void> checkEverything() async {
 ```
 
 Check the *build* first: if a new binary exists, patch state is irrelevant — patches are tied to a specific release version and reset on install of a new build.
-
----
-
-## Self-hosted / staging
-
-- Binary check: `AirBuild.configure(baseUrl: 'https://staging.airbuild.dev', ...)`
-- CodePush: point `base_url` in `shorebird.yaml` at your server — the updater resolves `{base_url}/api/v1/patches/check` from the bundled config (no Dart API needed)
-
-## Publishing
-
-Published to [pub.dev](https://pub.dev) as `airbuild`.
