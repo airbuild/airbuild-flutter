@@ -10,6 +10,12 @@
          grant the "install unknown apps" permission for this app. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- Lets Android 12+ (API 31+) honor PackageInstaller's
+         USER_ACTION_NOT_REQUIRED flag — self-updates install with no
+         confirmation sheet when this app is the installer of record for
+         itself. When it isn't, the system still asks the user. -->
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
+
     <application>
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -20,5 +26,13 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/airbuild_file_paths" />
         </provider>
+
+        <!-- Receives PackageInstaller session results for in-app APK updates
+             (API 31+). Launches the system's confirmation sheet when user
+             action is still required. Non-exported: the broadcast arrives via
+             an explicit PendingIntent we created ourselves. -->
+        <receiver
+            android:name=".InstallResultReceiver"
+            android:exported="false" />
     </application>
 </manifest>

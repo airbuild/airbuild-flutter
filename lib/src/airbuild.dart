@@ -125,7 +125,7 @@ class AirBuild {
       context,
       update: update,
       appName: appName,
-      onUpdate: () => _performUpdate(update, platform),
+      onUpdate: () => installUpdate(update),
     );
 
     if (accepted == true) {
@@ -149,47 +149,138 @@ class AirBuild {
     return update;
   }
 
-  /// Performs the platform-specific update flow.
+  /// Runs the platform install flow for [update] — the same flow the
+  /// built-in dialog triggers when the tester taps "Update".
   ///
-  /// On Android, downloads the APK to a temp file and triggers the system
-  /// installer via a platform channel. On iOS, opens the install URL in the
-  /// browser (Safari) since iOS does not allow sideloading.
-  static Future<void> _performUpdate(UpdateInfo update, String platform) async {
+  /// - **Android**: downloads the APK to a temp file *inside the app* (no
+  ///   browser redirect) and installs it. On Android 12+ (API 31+) the
+  ///   install goes through a `PackageInstaller` session — when your app is
+  ///   its own installer of record, the update applies with no confirmation
+  ///   sheet at all; otherwise the standard install sheet opens and the
+  ///   user taps "Install". On Android 11 and below the install sheet
+  ///   always opens. Android may also ask the user once to allow installs
+  ///   from your app (required on API 26+). [onProgress] receives
+  ///   `(bytesReceived, totalBytes)` during the download — `totalBytes` is
+  ///   `-1` when the server doesn't send a content length — so custom UIs
+  ///   can show a progress bar.
+  /// - **iOS**: opens [UpdateInfo.installUrl] in Safari, since iOS does not
+  ///   allow sideloading IPAs in-app.
+  ///
+  /// Use this from a custom update UI — e.g. the `onUpdate` callback of
+  /// [showUpdateDialog], or your own bottom sheet — after a headless
+  /// `checkForUpdates()` call (one without `context`):
+  ///
+  /// ```dart
+  /// final info = await AirBuild.checkForUpdates(currentVersion: '1.0.0');
+  /// if (info.hasUpdate) {
+  ///   await AirBuild.installUpdate(info);
+  /// }
+  /// ```
+  ///
+  /// `download_started` / `install_started` analytics events are reported
+  /// automatically, exactly as with the built-in dialog, and
+  /// `download_failed` / `install_failed` are reported when the
+  /// corresponding step throws.
+  static Future<void> installUpdate(
+    UpdateInfo update, {
+    void Function(int received, int total)? onProgress,
+  }) async {
+    final client = _client;
+    if (client == null) {
+      throw StateError(
+        'AirBuild.configure() must be called before installUpdate()',
+      );
+    }
+
+    final platform = Platform.isIOS ? 'ios' : 'android';
     if (platform == 'ios') {
-      final url = Uri.parse(update.installUrl ?? '');
-      if (url.toString().isNotEmpty) {
+      final installUrl = update.installUrl;
+      final url = installUrl == null ? null : Uri.tryParse(installUrl);
+      if (url == null ||
+          !['https', 'http', 'itms-services'].contains(url.scheme)) {
+        throw Exception(
+          'No valid install URL available for this update '
+          '(expected an https or itms-services URL)',
+        );
+      }
+      try {
         await launchUrl(url, mode: LaunchMode.externalApplication);
+      } catch (e) {
+        throw Exception('Could not open the iOS install URL: $e');
       }
-    } else {
-      // Android: download APK and trigger install
-      final downloadUrl = update.downloadUrl;
-      if (downloadUrl == null) {
-        throw Exception('No download URL available for this update');
-      }
+      return;
+    }
 
-      final client = _client!;
-      if (update.buildId != null) {
+    // Android: download APK in-app and trigger the system installer
+    final downloadUrl = update.downloadUrl;
+    if (downloadUrl == null) {
+      throw Exception('No download URL available for this update');
+    }
+
+    final buildId = update.buildId;
+    if (buildId != null) {
+      client.reportEvent(
+        buildId: buildId,
+        event: 'download_started',
+        platform: platform,
+      );
+    }
+
+    final dir = await getTemporaryDirectory();
+    final apkPath = '${dir.path}/airbuild_update.apk';
+    // Remove a stale APK from a previous run before downloading — a failed
+    // install can otherwise leave an old file behind that later gets picked
+    // up if the new download fails part-way.
+    await File(apkPath).delete().catchError((_) => File(apkPath));
+
+    try {
+      await client.downloadApk(
+        url: downloadUrl,
+        outputPath: apkPath,
+        onProgress: onProgress,
+      );
+      // Guard against a redirect/error page being saved as the "APK" —
+      // Android APKs are ZIP archives and always start with the PK magic.
+      final file = File(apkPath);
+      final header =
+          await file.openRead(0, 2).expand((chunk) => chunk).toList();
+      if (header.length < 2 || header[0] != 0x50 || header[1] != 0x4B) {
+        await file.delete().catchError((_) => file);
+        throw Exception(
+          'Downloaded file is not a valid APK (unexpected file signature)',
+        );
+      }
+    } catch (e) {
+      if (buildId != null) {
         client.reportEvent(
-          buildId: update.buildId!,
-          event: 'download_started',
+          buildId: buildId,
+          event: 'download_failed',
           platform: platform,
         );
       }
+      rethrow;
+    }
 
-      final dir = await getTemporaryDirectory();
-      final apkPath = '${dir.path}/airbuild_update.apk';
-      await client.downloadApk(url: downloadUrl, outputPath: apkPath);
+    if (buildId != null) {
+      client.reportEvent(
+        buildId: buildId,
+        event: 'install_started',
+        platform: platform,
+      );
+    }
 
-      if (update.buildId != null) {
-        client.reportEvent(
-          buildId: update.buildId!,
-          event: 'install_started',
-          platform: platform,
-        );
-      }
-
-      // Trigger system installer via platform channel
+    // Trigger system installer via platform channel
+    try {
       await _triggerApkInstall(apkPath);
+    } catch (e) {
+      if (buildId != null) {
+        client.reportEvent(
+          buildId: buildId,
+          event: 'install_failed',
+          platform: platform,
+        );
+      }
+      rethrow;
     }
   }
 

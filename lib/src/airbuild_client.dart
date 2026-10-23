@@ -46,7 +46,7 @@ class AirBuildClient {
         uri,
         headers: {
           'Accept': 'application/json',
-          'User-Agent': 'AirBuild-Flutter-SDK/0.1.0',
+          'User-Agent': 'AirBuild-Flutter-SDK/0.4.0',
         },
       ).timeout(const Duration(seconds: 15));
 
@@ -64,7 +64,8 @@ class AirBuildClient {
   /// Reports an analytics event to `POST /api/sdk/report-event`.
   ///
   /// [event] should be one of: `update_prompt_shown`, `update_accepted`,
-  /// `update_declined`, `download_started`, `install_started`.
+  /// `update_declined`, `download_started`, `download_failed`,
+  /// `install_started`, `install_failed`.
   ///
   /// Returns `true` if the server accepted the event. Failures are swallowed
   /// and reported as `false` so analytics never disrupts the user flow.
@@ -81,7 +82,7 @@ class AirBuildClient {
             headers: {
               'Content-Type': 'application/json',
               'Accept': 'application/json',
-              'User-Agent': 'AirBuild-Flutter-SDK/0.1.0',
+              'User-Agent': 'AirBuild-Flutter-SDK/0.4.0',
             },
             body: jsonEncode({
               'key': config.distributionKey,
@@ -110,21 +111,35 @@ class AirBuildClient {
     final response = await _httpClient.send(request);
 
     if (response.statusCode != 200) {
+      // Drain the body so the connection can be reused/closed cleanly.
+      await response.stream.drain<void>();
       throw HttpException('Download failed with status ${response.statusCode}');
     }
 
     final total = response.contentLength ?? -1;
-    final sink = File(outputPath).openWrite();
+    final output = File(outputPath);
+    final sink = output.openWrite();
     var received = 0;
     try {
       await for (final chunk in response.stream) {
         sink.add(chunk);
         received += chunk.length;
-        if (onProgress != null) onProgress(received, total);
+        if (onProgress != null) {
+          // A throwing host-app progress callback must not break the download.
+          try {
+            onProgress(received, total);
+          } catch (_) {}
+        }
       }
+    } catch (e) {
+      // Close the sink then remove the partial file so it can't be installed.
+      await sink.flush().catchError((_) {});
+      await sink.close().catchError((_) {});
+      await output.delete().catchError((_) => output);
+      rethrow;
     } finally {
-      await sink.flush();
-      await sink.close();
+      await sink.flush().catchError((_) {});
+      await sink.close().catchError((_) {});
     }
     return outputPath;
   }

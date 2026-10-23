@@ -45,6 +45,10 @@ class _HomePageState extends State<HomePage> {
   Patch? _currentPatch;
   String _codePushStatus = 'Not checked yet';
 
+  /// APK download progress (0–1) while a custom update install is running,
+  /// or null when idle. Fed by `AirBuild.installUpdate`'s `onProgress`.
+  double? _downloadProgress;
+
   @override
   void initState() {
     super.initState();
@@ -76,6 +80,21 @@ class _HomePageState extends State<HomePage> {
                 icon: const Icon(Icons.system_update),
                 label: const Text('Check for Updates'),
               ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () => _checkForUpdatesSilent(context),
+                icon: const Icon(Icons.tune),
+                label: const Text('Check silently (custom dialog)'),
+              ),
+              if (_downloadProgress != null) ...[
+                const SizedBox(height: 16),
+                LinearProgressIndicator(value: _downloadProgress),
+                const SizedBox(height: 4),
+                Text(
+                  'Downloading… ${((_downloadProgress ?? 0) * 100).toStringAsFixed(0)}%',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
 
               const SizedBox(height: 48),
               const Divider(),
@@ -103,6 +122,8 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  /// The default flow: pass `context` and the SDK shows its built-in
+  /// update dialog, runs the install flow, and reports analytics events.
   Future<void> _checkForUpdates(BuildContext context) async {
     try {
       final result = await AirBuild.checkForUpdates(
@@ -113,6 +134,81 @@ class _HomePageState extends State<HomePage> {
       if (!result.hasUpdate && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('You are on the latest version.')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error checking for updates: $e')),
+        );
+      }
+    }
+  }
+
+  /// The headless flow: omit `context` so no dialog is shown — you get an
+  /// [UpdateInfo] back and decide what to do with it. This is how you build
+  /// fully custom update UIs (bottom sheets, banners, forced-update gates…).
+  ///
+  /// Here we still reuse the SDK's [showUpdateDialog] but with our own
+  /// callbacks — useful when you want the SDK's dialog UI but need to hook
+  /// the Update/Later actions (analytics, forced updates, custom install).
+  Future<void> _checkForUpdatesSilent(BuildContext context) async {
+    try {
+      // No `context` — nothing is shown; we inspect the result ourselves.
+      final info = await AirBuild.checkForUpdates(currentVersion: '1.0.0');
+
+      if (!context.mounted) return;
+
+      if (!info.hasUpdate) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('You are on the latest version.')),
+        );
+        return;
+      }
+
+      // Every field on UpdateInfo is available for custom UIs:
+      //   info.latestVersion, info.latestBuildNumber, info.releaseNotes,
+      //   info.fileSizeBytes / info.fileSizeDisplay, info.iconUrl,
+      //   info.downloadUrl (Android APK), info.installUrl (iOS),
+      //   info.minOsVersion, info.isPasswordProtected, info.createdAt.
+      final accepted = await showUpdateDialog(
+        context,
+        update: info,
+        appName: 'Example App',
+        onUpdate: () async {
+          // AirBuild.installUpdate runs the same in-app install the
+          // default dialog uses — on Android it downloads the APK inside
+          // the app and launches the system installer (no browser), on
+          // iOS it opens the install URL in Safari. `onProgress` reports
+          // download progress so a custom UI can show a bar.
+          try {
+            await AirBuild.installUpdate(
+              info,
+              onProgress: (received, total) {
+                if (mounted && total > 0) {
+                  setState(() => _downloadProgress = received / total);
+                }
+              },
+            );
+          } finally {
+            if (mounted) setState(() => _downloadProgress = null);
+          }
+        },
+        onLater: () {
+          // Optional hook — runs when the user taps "Later". The dialog
+          // still dismisses itself afterwards.
+        },
+      );
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              accepted == true
+                  ? 'Update accepted'
+                  : 'Update declined or dismissed',
+            ),
+          ),
         );
       }
     } catch (e) {

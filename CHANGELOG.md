@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.4.0 - 2026-10-23
+
+### Added
+- `AirBuild.installUpdate(update, {onProgress})` — the platform install flow
+  is now public, so custom update UIs (e.g. `showUpdateDialog`'s `onUpdate`
+  callback, or your own bottom sheet after a headless `checkForUpdates`)
+  can reuse it instead of reimplementing download + install. On Android it
+  downloads the APK inside the app and installs it; on iOS it opens the
+  install URL in Safari. `onProgress` reports APK download progress
+  (`received`/`total` bytes) for custom progress UIs. Reports the same
+  `download_started`/`install_started` analytics as the built-in dialog.
+- Android 12+ (API 31+): APK updates now install through a
+  `PackageInstaller` session with `USER_ACTION_NOT_REQUIRED` — when the app
+  is its own installer of record, the update applies with **no system
+  confirmation sheet**. Otherwise `InstallResultReceiver` auto-launches the
+  normal install sheet. Declares `UPDATE_PACKAGES_WITHOUT_USER_ACTION`.
+- Example app: "Check silently (custom dialog)" button demonstrating a
+  headless `checkForUpdates`, `UpdateInfo` inspection, `showUpdateDialog`
+  with custom callbacks, and a live download-progress bar.
+
+### Changed
+- Android 11 and below keep the previous `ACTION_VIEW` +
+  `FileProvider` install path; the session path is also skipped on any
+  session failure (same UX as before).
+- `AirBuild.installUpdate` now reports `download_failed`/`install_failed`
+  analytics events on failure, validates the downloaded file is an APK
+  (PK/ZIP signature) before installing, removes a stale `airbuild_update.apk`
+  before each download, and validates the iOS install URL scheme
+  (`https`/`itms-services`) before launching.
+- On Android 8+ (API 26+) `installApk` first checks
+  `canRequestPackageInstalls()` — when the "install unknown apps"
+  privilege hasn't been granted, the system settings screen for your app
+  opens and the call fails with a clear error instead of silently failing.
+- `AirBuildClient.downloadApk` deletes the partial file when the stream
+  fails mid-download, drains the response body on non-200s, and a throwing
+  `onProgress` callback can no longer abort the download.
+
+### Fixed
+- Plugin `android/build.gradle` now applies `kotlin-android` — without it
+  the Kotlin plugin sources couldn't compile in host app builds.
+
 ## 0.3.1 - 2026-10-22
 
 ### Fixed
