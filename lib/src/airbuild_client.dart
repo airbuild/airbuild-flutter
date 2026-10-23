@@ -56,7 +56,9 @@ class AirBuildClient {
       return UpdateInfo.fromJson(
         jsonDecode(response.body) as Map<String, dynamic>,
       );
-    } on Exception {
+    } catch (_) {
+      // Includes TypeErrors from malformed response fields — a bad payload
+      // must degrade to "no update", never crash the host app.
       return const UpdateInfo(hasUpdate: false);
     }
   }
@@ -94,7 +96,7 @@ class AirBuildClient {
           )
           .timeout(const Duration(seconds: 10));
       return response.statusCode == 200 || response.statusCode == 201;
-    } on Exception {
+    } catch (_) {
       return false;
     }
   }

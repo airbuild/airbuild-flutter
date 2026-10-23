@@ -1,3 +1,13 @@
+/// Parses a JSON value that may be an int, a double, or a numeric string
+/// into an int. Some server versions emitted `latestBuildNumber` as a
+/// quoted string — accepting both keeps older deployments working.
+int? _asInt(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value);
+  return null;
+}
+
 /// Describes an available update returned by the AirBuild check-update endpoint.
 class UpdateInfo {
   /// Creates an [UpdateInfo] from the JSON returned by
@@ -8,12 +18,12 @@ class UpdateInfo {
     return UpdateInfo(
       hasUpdate: json['hasUpdate'] as bool? ?? false,
       latestVersion: json['latestVersion'] as String?,
-      latestBuildNumber: json['latestBuildNumber'] as int?,
+      latestBuildNumber: _asInt(json['latestBuildNumber']),
       buildId: json['buildId'] as String?,
       releaseNotes: json['releaseNotes'] as String?,
       downloadUrl: json['downloadUrl'] as String?,
       installUrl: json['installUrl'] as String?,
-      fileSizeBytes: json['fileSizeBytes'] as int?,
+      fileSizeBytes: _asInt(json['fileSizeBytes']),
       iconUrl: json['iconUrl'] as String?,
       minOsVersion: json['minOsVersion'] as String?,
       isPasswordProtected: json['isPasswordProtected'] as bool? ?? false,

@@ -13,7 +13,7 @@ These are separate concerns: the update check asks "is there a newer *build*?", 
 
 ```yaml
 dependencies:
-  airbuild: ^0.4.0
+  airbuild: ^0.4.1
 ```
 
 ```bash

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.1 - 2026-10-23
+
+### Fixed
+- `checkForUpdates` no longer fails against servers that return
+  `latestBuildNumber`/`fileSizeBytes` as quoted strings — `UpdateInfo` now
+  tolerantly parses ints, doubles, and numeric strings.
+- `AirBuildClient` now catches `Error` types (e.g. `TypeError` from
+  malformed payloads), not just `Exception`s — a bad response degrades to
+  "no update" instead of propagating out of the SDK.
+
 ## 0.4.0 - 2026-10-23
 
 ### Added
